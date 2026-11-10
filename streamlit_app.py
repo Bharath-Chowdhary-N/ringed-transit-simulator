@@ -18,12 +18,42 @@ st.title("Ringed Transit Simulator")
 tab_web, tab_py = st.tabs(["Interactive simulator", "Python model"])
 
 # ------------------------------------------------ the full browser simulator
+@st.cache_resource
+def simulator_html():
+    return (Path(__file__).parent / "index.html").read_text(encoding="utf-8")
+
+
 with tab_web:
-    html = (Path(__file__).parent / "index.html").read_text(encoding="utf-8")
-    components.html(html, height=1800, scrolling=True)
+    components.html(simulator_html(), height=1800, scrolling=True)
 
 # ------------------------------------------------ ringed_transit.light_curve
-with tab_py:
+N_PTS = 800           # samples across the transit window (plenty for a plot)
+
+
+def time_grid(P, a, rp, r_out):
+    half = P / np.pi * np.arcsin(min(1.0, (1 + rp * max(r_out, 1.0)) / a)) * 1.3
+    return np.linspace(-half, half, N_PTS)
+
+
+@st.cache_data(max_entries=200)
+def ringed_curve(P, a, inc, rp, r_in, r_out, tau, ring_incl, ring_pa, u1, u2, n_grid):
+    t = time_grid(P, a, rp, r_out)
+    return rt.light_curve(t, P=P, t0=0.0, a=a, inc=inc, rp=rp, u1=u1, u2=u2,
+                          r_in=r_in, r_out=r_out, tau=tau, ring_incl=ring_incl,
+                          ring_pa=ring_pa, n_grid=n_grid)
+
+
+@st.cache_data(max_entries=200)
+def bare_curve(P, a, inc, rp, r_out, u1, u2, n_grid):
+    # planet only: independent of the ring settings, so ring sliders reuse it
+    # (r_out only sets the time window, to match the ringed curve)
+    t = time_grid(P, a, rp, r_out)
+    return rt.light_curve(t, P=P, t0=0.0, a=a, inc=inc, rp=rp, u1=u1, u2=u2,
+                          tau=0.0, n_grid=n_grid)
+
+
+@st.fragment
+def python_model():
     c1, c2, c3 = st.columns(3)
     with c1:
         st.subheader("Orbit")
@@ -41,26 +71,17 @@ with tab_py:
         st.subheader("Star")
         u1 = st.slider("Limb darkening u1", 0.0, 1.0, 0.4, 0.01)
         u2 = st.slider("Limb darkening u2", -0.5, 1.0, 0.25, 0.01)
-        n_grid = st.select_slider("Grid resolution", [100, 200, 300, 400], 200)
-
-    @st.cache_data
-    def curves(P, a, inc, rp, r_in, r_out, tau, ring_incl, ring_pa, u1, u2, n_grid):
-        b = a * np.cos(np.radians(inc))
-        half = P / np.pi * np.arcsin(min(1.0, (1 + rp * r_out) / a)) * 1.3
-        t = np.linspace(-half, half, 1500)
-        kw = dict(P=P, t0=0.0, a=a, inc=inc, rp=rp, u1=u1, u2=u2,
-                  r_in=r_in, r_out=r_out, ring_incl=ring_incl,
-                  ring_pa=ring_pa, n_grid=n_grid)
-        ringed = rt.light_curve(t, tau=tau, **kw)
-        bare = rt.light_curve(t, tau=0.0, **kw)
-        return t, ringed, bare, b
+        n_grid = st.select_slider("Grid resolution", [100, 150, 200, 300, 400], 150)
 
     if r_out <= r_in:
         st.warning("Outer ring radius must be larger than the inner radius.")
         st.stop()
 
-    t, ringed, bare, b = curves(P, a, inc, rp, r_in, r_out, tau,
-                                ring_incl, ring_pa, u1, u2, n_grid)
+    t = time_grid(P, a, rp, r_out)
+    b = a * np.cos(np.radians(inc))
+    ringed = ringed_curve(P, a, inc, rp, r_in, r_out, tau, ring_incl, ring_pa,
+                          u1, u2, n_grid)
+    bare = bare_curve(P, a, inc, rp, r_out, u1, u2, n_grid)
 
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 6), sharex=True,
                                    gridspec_kw=dict(height_ratios=[3, 1]))
@@ -74,8 +95,13 @@ with tab_py:
     ax2.set_xlabel("time from mid-transit [hours]")
     fig.tight_layout()
     st.pyplot(fig)
+    plt.close(fig)
 
     m1, m2, m3 = st.columns(3)
     m1.metric("Impact parameter b", f"{b:.2f}")
     m2.metric("Transit depth", f"{(1 - ringed.min()) * 100:.3f} %")
     m3.metric("Max ring signal", f"{np.abs(ringed - bare).max() * 1e6:.0f} ppm")
+
+
+with tab_py:
+    python_model()
