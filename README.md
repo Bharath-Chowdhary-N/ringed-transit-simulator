@@ -4,10 +4,13 @@
 
 Light-curve models of transiting exoplanets with rings.
 
-![Ringed Transit Simulator](simulation.png)
+**▶ Try it live: https://bharath-chowdhary-n.github.io/ringed-transit-simulator/**
+
+[![Ringed Transit Simulator](simulation.png)](https://bharath-chowdhary-n.github.io/ringed-transit-simulator/)
 
 - **`index.html`** — interactive browser simulator (single self-contained file, no build step).
-  Open it directly or host via GitHub Pages. Includes ring geometry, optional exomoon,
+  Runs live at https://bharath-chowdhary-n.github.io/ringed-transit-simulator/, or open the
+  file directly. Includes ring geometry, optional exomoon,
   star spots, dust clump and dilution.
 - **`ringed_transit.py`** — the Python model the web page is ported from.
 
