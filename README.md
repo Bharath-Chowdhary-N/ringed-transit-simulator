@@ -2,6 +2,8 @@
 
 Light-curve models of transiting exoplanets with rings.
 
+![Ringed Transit Simulator](simulation.png)
+
 - **`index.html`** — interactive browser simulator (single self-contained file, no build step).
   Open it directly or host via GitHub Pages. Includes ring geometry, optional exomoon,
   star spots, dust clump and dilution.
