@@ -1,0 +1,1163 @@
+<title>Ringed Transit Simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;600;700&family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: instrument console. Controls in a left rail, the sky view and
+   two stacked light-curve plots on the right; stacks to one column on phones. */
+:root {
+  --bg: #EDF0F5;          /* cool observatory slate */
+  --panel: #F8F9FC;
+  --ink: #18203A;
+  --muted: #5A6379;
+  --rule: #D3D9E4;
+  --e1: #2B4DB0;          /* epoch 1: cobalt */
+  --e2: #C86A12;          /* epoch 2: amber */
+  --bare: #8C94A8;
+  --planet: #141A2E;
+  --ring: #A9773F;
+  --space: #DCE2EC;
+  --good: #1F7A4D; --warn: #A36A00; --bad: #A33A3A;
+  --moon: #6F5AA8;
+  --spot: #5A3417;
+  --dust: #4A3B2C;
+  --display: "Archivo Narrow", "Arial Narrow", system-ui, sans-serif;
+  --body: "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F1424; --panel: #151B2F; --ink: #E4E8F2; --muted: #9AA3B9;
+    --rule: #283152; --e1: #86A6FF; --e2: #F3A250; --bare: #7D879E;
+    --planet: #05070D; --ring: #C99A62; --space: #0A0E1A;
+    --good: #5CC08D; --warn: #E3AE45; --bad: #E77B7B; --moon: #B39DF0; --spot: #B07A4A;
+    --dust: #5E4C38; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F1424; --panel: #151B2F; --ink: #E4E8F2; --muted: #9AA3B9;
+  --rule: #283152; --e1: #86A6FF; --e2: #F3A250; --bare: #7D879E;
+  --planet: #05070D; --ring: #C99A62; --space: #0A0E1A;
+  --good: #5CC08D; --warn: #E3AE45; --bad: #E77B7B; --moon: #B39DF0; --spot: #B07A4A;
+  --dust: #5E4C38; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body);
+  font-size: 14px; line-height: 1.45; }
+.wrap { max-width: 1320px; margin: 0 auto; padding-inline: 16px;
+  padding-block: 20px 40px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px;
+  margin-bottom: 14px; }
+h1 { font-family: var(--display); font-weight: 700; font-size: 26px;
+  letter-spacing: 0.01em; margin: 0; text-wrap: balance; }
+.lede { color: var(--muted); margin: 0; max-width: 70ch; }
+.grid { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 18px;
+  align-items: start; }
+@media (max-width: 900px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+aside { background: var(--panel); border: 1px solid var(--rule);
+  border-radius: 8px; padding: 14px; display: flex; flex-direction: column;
+  gap: 14px; }
+fieldset { border: 0; margin: 0; padding: 0; display: flex;
+  flex-direction: column; gap: 8px; min-width: 0; }
+legend { font-family: var(--display); font-weight: 600; font-size: 12px;
+  text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted);
+  padding: 0; margin-bottom: 4px; display: flex; gap: 8px; align-items: center; }
+.swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.ctl { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px;
+  align-items: center; }
+.ctl label { font-size: 13px; }
+.ctl label small { color: var(--muted); font-size: 11.5px; }
+.ctl output { font-family: var(--mono); font-size: 12px;
+  font-variant-numeric: tabular-nums; color: var(--ink); text-align: right; }
+.ctl input[type=range] { grid-column: 1 / -1; width: 100%; margin: 0;
+  accent-color: var(--e1); }
+fieldset.e2 input[type=range] { accent-color: var(--e2); }
+fieldset.moon input[type=range] { accent-color: var(--moon); }
+fieldset.spot input[type=range] { accent-color: var(--spot); }
+fieldset.dust input { accent-color: var(--dust); }
+fieldset.off .check { opacity: 0.45; }
+fieldset.off .ctl { opacity: 0.45; }
+legend label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer;
+  text-transform: none; letter-spacing: 0; font-family: var(--body); font-weight: 500;
+  font-size: 12px; color: var(--ink); margin-left: auto; }
+.presets { display: flex; flex-wrap: wrap; gap: 6px; }
+button { font-family: var(--body); font-size: 12.5px; color: var(--ink);
+  background: transparent; border: 1px solid var(--rule); border-radius: 6px;
+  padding: 5px 9px; cursor: pointer; }
+button:hover { border-color: var(--muted); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--e1);
+  outline-offset: 2px; }
+button.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 6px;
+  overflow: hidden; }
+.seg button { border: 0; border-radius: 0; padding: 5px 10px; }
+.seg button[aria-pressed=true] { background: var(--ink); color: var(--bg); }
+.stage { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.panel { background: var(--panel); border: 1px solid var(--rule);
+  border-radius: 8px; padding: 12px; min-width: 0; }
+.panel h2 { font-family: var(--display); font-weight: 600; font-size: 13px;
+  text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted);
+  margin: 0 0 8px; display: flex; flex-wrap: wrap; gap: 6px 14px;
+  align-items: center; }
+.panel h2 .key { font-family: var(--body); text-transform: none;
+  letter-spacing: 0; font-weight: 500; font-size: 12px; color: var(--ink);
+  display: inline-flex; gap: 5px; align-items: center; }
+.key i { display: inline-block; width: 16px; height: 0; border-top: 2px solid; }
+.key i.dash { border-top-style: dashed; }
+.skyrow { display: grid; grid-template-columns: minmax(0, 1fr) 190px; gap: 12px; }
+@media (max-width: 640px) { .skyrow { grid-template-columns: minmax(0, 1fr); } }
+.insets { display: grid; grid-template-columns: 1fr; gap: 8px; }
+@media (max-width: 640px) { .insets { grid-template-columns: 1fr 1fr; } }
+.inset { display: flex; flex-direction: column; gap: 4px; }
+.inset span { font-size: 11.5px; color: var(--muted); }
+canvas { display: block; width: 100%; }
+.transport { display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  margin-top: 8px; }
+.transport input[type=range] { flex: 1 1 180px; accent-color: var(--ink); }
+.transport output { font-family: var(--mono); font-size: 12px;
+  font-variant-numeric: tabular-nums; min-width: 9ch; }
+.readouts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0; border: 1px solid var(--rule); border-radius: 8px;
+  background: var(--panel); overflow: hidden; }
+.ro { padding: 10px 12px; border-right: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule); margin: 0 -1px -1px 0; min-width: 0; }
+.ro dt { font-size: 11.5px; color: var(--muted); }
+.ro dd { margin: 2px 0 0; font-family: var(--mono); font-size: 17px;
+  font-variant-numeric: tabular-nums; }
+.ro dd small { font-size: 11.5px; color: var(--muted); }
+.chip { display: inline-block; font-family: var(--body); font-size: 11px;
+  font-weight: 600; padding: 1px 7px; border-radius: 999px; margin-left: 4px;
+  border: 1px solid currentColor; vertical-align: 2px; }
+.chip.good { color: var(--good); } .chip.warn { color: var(--warn); }
+.chip.bad { color: var(--bad); }
+.note { color: var(--muted); font-size: 12.5px; max-width: 80ch; margin: 0; }
+.msg { color: var(--bad); font-size: 13px; margin: 6px 0 0; }
+details { background: var(--panel); border: 1px solid var(--rule);
+  border-radius: 8px; padding: 10px 12px; }
+summary { cursor: pointer; font-family: var(--display); font-weight: 600;
+  font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--muted); }
+pre { font-family: var(--mono); font-size: 12px; background: var(--bg);
+  border: 1px solid var(--rule); border-radius: 6px; padding: 10px;
+  overflow-x: auto; margin: 10px 0 8px; }
+.check { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+.check input { accent-color: var(--e1); }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Ringed Transit Simulator</h1>
+    <p class="lede">Shape the ring, send the planet across a limb-darkened star, and compare two transits. Epoch 2 can differ by ring precession, ring evolution, a timing shift, the motion of an exomoon or the rotation of a spotted star; the lower plot shows whether that change rises above TESS 2-minute noise. False positives can be added too: a dust clump with a tail that shears and fades by epoch 2, and light from other stars in the aperture.</p>
+  </header>
+
+  <div class="grid">
+    <aside id="controls">
+      <div>
+        <div class="presets" id="presets"></div>
+      </div>
+    </aside>
+
+    <section class="stage">
+      <div class="panel">
+        <h2>Sky view
+          <span class="key"><span class="seg" role="group" aria-label="Epoch shown">
+            <button id="showE1" aria-pressed="true">Epoch 1</button>
+            <button id="showE2" aria-pressed="false">Epoch 2</button>
+          </span></span>
+          <span class="key" style="color:var(--muted)">x: direction of motion · y: sky north · star radius = 1</span>
+        </h2>
+        <div class="skyrow">
+          <canvas id="sky" aria-label="Star and transiting ringed planet"></canvas>
+          <div class="insets">
+            <div class="inset"><canvas id="z1" aria-label="Ring at epoch 1"></canvas><span id="z1cap">Ring at epoch 1</span></div>
+            <div class="inset"><canvas id="z2" aria-label="Ring at epoch 2"></canvas><span id="z2cap">Ring at epoch 2</span></div>
+          </div>
+        </div>
+        <div class="transport">
+          <button id="play" class="primary">Play</button>
+          <input type="range" id="tpos" min="0" max="1000" value="500" aria-label="Time from mid-transit">
+          <output id="tout">0.00 h</output>
+        </div>
+        <p class="msg" id="msg" hidden></p>
+      </div>
+
+      <dl class="readouts" id="readouts"></dl>
+
+      <div class="panel">
+        <h2>Light curve
+          <span class="key"><i style="border-color:var(--e1)"></i>Epoch 1</span>
+          <span class="key"><i style="border-color:var(--e2)"></i>Epoch 2</span>
+          <span class="key"><i class="dash" style="border-color:var(--bare)"></i>Same system, no ring</span>
+          <label class="check"><input type="checkbox" id="showData" checked> Simulated TESS data (10-min bins)</label>
+          <label class="check"><input type="checkbox" id="normOot" checked> Normalise each transit (out-of-transit line fit)</label>
+        </h2>
+        <canvas id="lc" aria-label="Light curves of both epochs"></canvas>
+      </div>
+
+      <div class="panel">
+        <h2>Differences
+          <span class="key"><i class="dash" style="border-color:var(--e1)"></i>Ring signal (epoch 1 − no ring)</span>
+          <span class="key"><i style="border-color:var(--e2)"></i>Epoch 2 − epoch 1</span>
+          <span class="key"><span class="swatch" style="background:var(--rule)"></span>±1σ noise per 30-min bin</span>
+        </h2>
+        <canvas id="diff" aria-label="Difference curves"></canvas>
+      </div>
+
+      <p class="note">Physics follows <code>ringed_transit.py</code>: quadratic limb darkening, circular orbit, opaque planet, thin ring of normal optical depth τ seen through exp(−τ/|cos θ|), planet hiding the ring behind it. The planet disk is computed exactly; the ring is rasterised (about 0.0005% precision after the plot settles). An optional moon orbits the planet–moon barycentre (period from Kepler's law), adds its own limb-darkened dip and shifts the planet's transit time; moon–planet overlap is counted once, ring–moon overlap is ignored. Star spots are dark caps on the rotating, limb-darkened star: they dim it as they rotate into view, and a planet, ring or moon crossing one blocks less light (spot-crossing bump); with "Normalise each transit" on, each epoch is divided by a line fitted to its out-of-transit flux, as a pipeline would; off, flux is relative to the unspotted star. SNR assumes white noise at the chosen 2-minute scatter: ring SNR = √Σ(ringed − bare)² / σ for one transit; epoch-change SNR adds the noise of both transits. The dust clump moves along the same orbit, delayed by the chosen time; its optical depth is an asymmetric Gaussian along the orbit (separate leading and trailing lengths) times a Gaussian across it, the star is integrated on a grid, and dust hides no star spots. By epoch 2, Keplerian shear from the radial spread Δa/a stretches the clump by 3π(Δa/a)·a per orbit, conserving its cross-section, minus the per-orbit loss. Dust mass = 4/3 ρ s ∫τ dA for grains of radius s and ρ = 2.5 g cm⁻³. Light from other stars adds a constant: observed = (1 − c)·model + c.</p>
+
+      <details>
+        <summary>Same setup in Python</summary>
+        <pre id="py"></pre>
+        <button id="copyPy">Copy code</button> <span id="copied" class="note" hidden>Copied</span>
+      </details>
+    </section>
+  </div>
+</div>
+
+<script>
+// Ringed-transit physics, ported from ringed_transit.py (circular orbit).
+// Planet disk: exact 1-D integral over stellar annuli (Gauss-Legendre).
+// Ring: thin annulus rasterised on a grid, transmission exp(-tau/|cos th|),
+// hidden where the opaque planet covers it (same as occulter_map()).
+// Units: lengths in stellar radii, times in days from mid-transit.
+
+function gaussLegendre(n) {
+  const x = new Float64Array(n), w = new Float64Array(n);
+  for (let i = 0; i < Math.ceil(n / 2); i++) {
+    let z = Math.cos(Math.PI * (i + 0.75) / (n + 0.5)), pp = 0;
+    for (let it = 0; it < 100; it++) {
+      let p1 = 1, p2 = 0;
+      for (let j = 1; j <= n; j++) {
+        const p3 = p2; p2 = p1;
+        p1 = ((2 * j - 1) * z * p2 - (j - 1) * p3) / j;
+      }
+      pp = n * (z * p1 - p2) / (z * z - 1);
+      const dz = p1 / pp; z -= dz;
+      if (Math.abs(dz) < 1e-15) break;
+    }
+    x[i] = -z; x[n - 1 - i] = z;
+    w[i] = w[n - 1 - i] = 2 / ((1 - z * z) * pp * pp);
+  }
+  return { x, w };
+}
+const GL = gaussLegendre(64);
+
+function intensity(mu, u1, u2) {
+  const q = 1 - mu;
+  return 1 - u1 * q - u2 * q * q;
+}
+
+// Fraction of stellar flux NOT blocked by an opaque disk of radius p at
+// sky separation d (quadratic limb darkening).
+function diskFlux(d, p, u1, u2, norm) {
+  if (d >= 1 + p) return 1;
+  const lo = Math.max(0, d - p), hi = Math.min(1, d + p);
+  const h = 0.5 * (hi - lo), m = 0.5 * (hi + lo);
+  let blocked = 0;
+  for (let k = 0; k < GL.x.length; k++) {
+    const r = h * GL.x[k] + m;
+    let theta;
+    if (r < p - d) theta = Math.PI;
+    else if (d < 1e-12) theta = r < p ? Math.PI : 0;
+    else {
+      let c = (r * r + d * d - p * p) / (2 * r * d);
+      c = Math.min(1, Math.max(-1, c));
+      theta = Math.acos(c);
+    }
+    const mu = Math.sqrt(Math.max(0, 1 - r * r));
+    blocked += intensity(mu, u1, u2) * 2 * r * theta * h * GL.w[k];
+  }
+  return 1 - blocked / norm;
+}
+
+function ringNormal(inclDeg, paDeg) {
+  const th = inclDeg * Math.PI / 180, pa = paDeg * Math.PI / 180;
+  return [Math.sin(th) * Math.cos(pa), Math.sin(th) * Math.sin(pa),
+          Math.cos(th)];
+}
+
+// Ring pixels (planet-centred offsets, opacity), excluding the planet disk.
+function ringMap(p, rIn, rOut, tau, inclDeg, paDeg, nGrid) {
+  const out = { x: [], y: [], op: [], dA: 0, reach: p };
+  if (!(tau > 0) || !(rOut > rIn)) return out;
+  const n = ringNormal(inclDeg, paDeg);
+  const nz = Math.abs(n[2]) > 1e-9 ? n[2] : 1e-9 * (n[2] >= 0 ? 1 : -1);
+  const trans = Math.exp(-tau / Math.abs(nz));
+  const half = p * rOut, step = 2 * half / nGrid;
+  out.dA = step * step;
+  let reach = p;
+  for (let i = 0; i < nGrid; i++) {
+    const y = -half + (i + 0.5) * step;
+    for (let j = 0; j < nGrid; j++) {
+      const x = -half + (j + 0.5) * step;
+      if (x * x + y * y <= p * p) continue;            // planet wins
+      const zr = -(n[0] * x + n[1] * y) / nz;
+      const dist = Math.sqrt(x * x + y * y + zr * zr) / p;
+      if (dist >= rIn && dist <= rOut) {
+        out.x.push(x); out.y.push(y); out.op.push(1 - trans);
+        reach = Math.max(reach, Math.hypot(x, y));
+      }
+    }
+  }
+  out.reach = reach;
+  return out;
+}
+
+// Sky position (circular orbit, Winn 2010 frame as sky_position()).
+function skyPos(t, P, a, b) {
+  const M = 2 * Math.PI * t / P, cosi = b / a,
+        sini = Math.sqrt(Math.max(0, 1 - cosi * cosi));
+  return { X: a * Math.sin(M), Y: -a * Math.cos(M) * cosi,
+           Z: a * Math.cos(M) * sini };
+}
+
+// Area of overlap of two circles (radii r1, r2, centre separation d).
+function circleOverlap(d, r1, r2) {
+  if (d >= r1 + r2) return 0;
+  if (d <= Math.abs(r1 - r2)) return Math.PI * Math.min(r1, r2) ** 2;
+  const c1 = Math.min(1, Math.max(-1, (d * d + r1 * r1 - r2 * r2) / (2 * d * r1)));
+  const c2 = Math.min(1, Math.max(-1, (d * d + r2 * r2 - r1 * r1) / (2 * d * r2)));
+  return r1 * r1 * Math.acos(c1) + r2 * r2 * Math.acos(c2) -
+    0.5 * Math.sqrt(Math.max(0, (-d + r1 + r2) * (d + r1 - r2) * (d - r1 + r2) * (d + r1 + r2)));
+}
+
+// Moon position relative to the planet (units R*). moon = {am (R*), Pm (d),
+// ph0 (rad, phase at the epoch-1 mid-transit), incl (deg; 90 = orbit seen
+// edge-on, moon moving along the planet's direction of motion), tref (d,
+// time of this epoch since epoch 1)}. z > 0 = moon in front of the planet.
+function moonRel(t, moon) {
+  const ph = moon.ph0 + 2 * Math.PI * (t + moon.tref) / moon.Pm;
+  const i = moon.incl * Math.PI / 180;
+  return { x: moon.am * Math.cos(ph), y: moon.am * Math.sin(ph) * Math.cos(i),
+           z: moon.am * Math.sin(ph) * Math.sin(i) };
+}
+
+// Star spots. A spot is a circular cap (angular radius rad, latitude lat,
+// longitude lon at epoch-1 mid-transit; 0 = facing the observer) with
+// brightness contrast c (0 = black, 1 = like the photosphere). Each cap is
+// sampled with surface elements (unit vectors in the star frame, spin axis
+// = z', and solid angle w). The star rotates prograde (spots move along +x,
+// the planet's direction of motion) with period Prot; the spin axis is
+// tilted by inc (90 = equator-on, axis along sky north).
+function spotElements(spots, nr = 7) {
+  const pts = [];
+  for (const sp of spots) {
+    const la = sp.lat * Math.PI / 180, lo = sp.lon * Math.PI / 180, R = sp.rad * Math.PI / 180;
+    const c = [Math.cos(la) * Math.cos(lo), Math.cos(la) * Math.sin(lo), Math.sin(la)];
+    let u = Math.abs(c[2]) < 0.9 ? [-c[1], c[0], 0] : [1, 0, 0];
+    const nu = Math.hypot(...u); u = u.map(v => v / nu);
+    const v = [c[1] * u[2] - c[2] * u[1], c[2] * u[0] - c[0] * u[2], c[0] * u[1] - c[1] * u[0]];
+    const da = R / nr;
+    for (let k = 0; k < nr; k++) {
+      const al = (k + 0.5) * da, nb = Math.max(6, Math.round(2 * Math.PI * Math.sin(al) / da));
+      const w = Math.sin(al) * da * (2 * Math.PI / nb);
+      for (let j = 0; j < nb; j++) {
+        const be = 2 * Math.PI * (j + 0.5) / nb, ca = Math.cos(al), sa = Math.sin(al);
+        pts.push({ x: ca * c[0] + sa * (Math.cos(be) * u[0] + Math.sin(be) * v[0]),
+                   y: ca * c[1] + sa * (Math.cos(be) * u[1] + Math.sin(be) * v[1]),
+                   z: ca * c[2] + sa * (Math.cos(be) * u[2] + Math.sin(be) * v[2]),
+                   w, k: 1 - sp.c, size: da });
+      }
+    }
+  }
+  return pts;
+}
+
+// Sky position (x, y, mu = z) of a spot element at time t (days since this
+// epoch's mid-transit; tref = time of this epoch since epoch 1).
+function spotSky(p, t, sp) {
+  const th = 2 * Math.PI * (t + sp.tref) / sp.Prot, c = Math.cos(th), s = Math.sin(th);
+  const xs = p.x * c - p.y * s, ys = p.x * s + p.y * c, zs = p.z;   // rotate about spin axis
+  const i = sp.inc * Math.PI / 180, ci = Math.cos(i), si = Math.sin(i);
+  // star-frame x' (lon 0) -> toward observer when equator-on; y' -> +x (motion)
+  return { x: ys, y: -xs * ci + zs * si, mu: xs * si + zs * ci };
+}
+
+// Limb-darkened star sampled on an N x N grid (points inside the disk, weight
+// = intensity x cell area / total flux), for occulters without a closed form.
+let gridCache = { key: "", g: null };
+function starGrid(N, u1, u2) {
+  const key = `${N}|${u1}|${u2}`;
+  if (gridCache.key === key) return gridCache.g;
+  const x = [], y = [], w = [], h = 2 / N, norm = Math.PI * (1 - u1 / 3 - u2 / 6);
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+    const xx = -1 + (j + 0.5) * h, yy = -1 + (i + 0.5) * h, r2 = xx * xx + yy * yy;
+    if (r2 >= 1) continue;
+    x.push(xx); y.push(yy); w.push(intensity(Math.sqrt(1 - r2), u1, u2) * h * h / norm);
+  }
+  gridCache = { key, g: { x, y, w } };
+  return gridCache.g;
+}
+
+// Dust clump optical depth at sky offset (dx along the motion, dy across)
+// from the clump head. Along the orbit: asymmetric Gaussian (sl ahead, st
+// behind, as the clump model of ring_fit_young.py); across: Gaussian of
+// width h; extra fragments trail the head every sep with 0.6x the depth.
+const FRAG_W = [1, 0.6, 0.36];
+function dustTau(dx, dy, du) {
+  const ey = Math.exp(-dy * dy / (2 * du.h * du.h));
+  if (ey < 1e-7) return 0;
+  let g = 0;
+  for (let f = 0; f < du.n; f++) {
+    const s = dx + f * du.sep;
+    g += FRAG_W[f] * Math.exp(-s * s / (2 * (s >= 0 ? du.sl * du.sl : du.st * du.st)));
+  }
+  return du.tau0 * g * ey;
+}
+// Fraction of stellar flux blocked by the clump with its head at (Xc, Yc).
+function dustBlock(Xc, Yc, du, G) {
+  // clump spans [Xc - 5 st - tail fragments, Xc + 5 sl] along the motion
+  if (Xc + 5 * du.sl < -1 || Xc - 5 * du.st - du.sep * (du.n - 1) > 1 ||
+      Math.abs(Yc) > 1 + 5 * du.h) return 0;
+  let blk = 0;
+  for (let k = 0; k < G.x.length; k++) {
+    const tau = dustTau(G.x[k] - Xc, G.y[k] - Yc, du);
+    if (tau > 0) blk += G.w[k] * (1 - Math.exp(-tau));
+  }
+  return blk;
+}
+
+// Light curve. pl = {P, a, b, rp, u1, u2, rIn, rOut, tau, incl, pa,
+//                    shift (days, e.g. TTV), nGrid,
+//                    moon: {rm, am, Pm, ph0, incl, q, tref} or null,
+//                    spots: {pts, Prot, inc, tref} or null,
+//                    dust: {tau0, sl, st, h, n, sep, off, N} or null,
+//                    contam: fraction of the aperture light from other stars}
+// Spots: flux = unspotted model - visible spot deficit + the part of that
+// deficit hidden behind the planet / ring (opacity-weighted) / moon, so a
+// transit across a spot is shallower (spot-crossing bump).
+// The planet-moon barycentre follows the orbit; planet = bary - q*rel,
+// moon = bary + (1-q)*rel (q = M_moon / (M_planet + M_moon)), so the moon
+// also shifts the planet's transit (TTV). Overlap of moon and planet disks
+// on the sky is counted once (ring-moon overlap is ignored).
+// Dust and dilution enter both curves, so ringed - bare stays
+// the ring signal. occ marks samples affected by an occultation (used to keep
+// them out of the out-of-transit normalisation).
+// Returns {bare (planet + moon, no ring), ringed (planet + ring + moon),
+//          moonBlock, dustB, occ} arrays.
+function lightCurve(t, pl, map) {
+  const norm = Math.PI * (1 - pl.u1 / 3 - pl.u2 / 6);
+  const rm = map || ringMap(pl.rp, pl.rIn, pl.rOut, pl.tau, pl.incl, pl.pa,
+                            pl.nGrid || 120);
+  const bare = new Float64Array(t.length), ringed = new Float64Array(t.length);
+  const moonBlock = new Float64Array(t.length), dustB = new Float64Array(t.length);
+  const occ = new Uint8Array(t.length);
+  const du = pl.dust, G = du ? starGrid(du.N, pl.u1, pl.u2) : null;
+  const dil = f => pl.contam ? (1 - pl.contam) * f + pl.contam : f;
+  const np = rm.x.length, k = rm.dA / norm, mo = pl.moon, spt = pl.spots;
+  const spotDef = new Float64Array(t.length), spotHid = new Float64Array(t.length);
+  let rn = null, rnz = 1, rop = 0;
+  if (spt && pl.tau > 0 && pl.rOut > pl.rIn) {
+    rn = ringNormal(pl.incl, pl.pa);
+    rnz = Math.abs(rn[2]) > 1e-9 ? rn[2] : 1e-9;
+    rop = 1 - Math.exp(-pl.tau / Math.abs(rnz));
+  }
+  for (let i = 0; i < t.length; i++) {
+    const s = skyPos(t[i] - (pl.shift || 0), pl.P, pl.a, pl.b);
+    let px = s.X, py = s.Y, mb = 0, mxx = 1e9, myy = 1e9;
+    let dB = 0;
+    if (du) {
+      const sc = skyPos(t[i] - (pl.shift || 0) - du.off, pl.P, pl.a, pl.b);
+      if (sc.Z > 0) dB = dustBlock(sc.X, sc.Y, du, G);
+      dustB[i] = dB; if (dB > 1e-6) occ[i] = 1;
+    }
+    // spot deficit of the visible hemisphere, and the part hidden by the occulters
+    let sd = 0, shP = 0, shR = 0;
+    if (spt) {
+      if (mo && mo.rm > 0 && s.Z > 0) {
+        const r0 = moonRel(t[i], mo);
+        mxx = s.X + (1 - mo.q) * r0.x; myy = s.Y + (1 - mo.q) * r0.y;
+      }
+      const ppx = mo && mo.rm > 0 ? s.X - mo.q * moonRel(t[i], mo).x : s.X;
+      const ppy = mo && mo.rm > 0 ? s.Y - mo.q * moonRel(t[i], mo).y : s.Y;
+      for (const p of spt.pts) {
+        const q = spotSky(p, t[i], spt);
+        if (q.mu <= 0) continue;
+        const e = intensity(q.mu, pl.u1, pl.u2) * p.k * p.w * q.mu;
+        sd += e;
+        if (s.Z <= 0) continue;
+        const dx = q.x - ppx, dy = q.y - ppy;
+        if (dx * dx + dy * dy < pl.rp * pl.rp) { shP += e; continue; }
+        if (mo && mo.rm > 0 && (q.x - mxx) ** 2 + (q.y - myy) ** 2 < mo.rm * mo.rm) { shP += e; continue; }
+        if (rn) {
+          const zr = -(rn[0] * dx + rn[1] * dy) / rnz;
+          const dist = Math.sqrt(dx * dx + dy * dy + zr * zr) / pl.rp;
+          if (dist >= pl.rIn && dist <= pl.rOut) shR += e * rop;
+        }
+      }
+      sd /= norm; shP /= norm; shR /= norm;
+    }
+    spotDef[i] = sd; spotHid[i] = shP + shR;
+    if (s.Z <= 0) { bare[i] = ringed[i] = dil(1 - sd - dB); continue; }
+    if (mo && mo.rm > 0) {
+      const r = moonRel(t[i], mo);
+      px -= mo.q * r.x; py -= mo.q * r.y;
+      const mx = s.X + (1 - mo.q) * r.x, my = s.Y + (1 - mo.q) * r.y;
+      const dm = Math.hypot(mx, my);
+      if (dm < 1 + mo.rm) {
+        mb = 1 - diskFlux(dm, mo.rm, pl.u1, pl.u2, norm);
+        const ov = circleOverlap(Math.hypot(mx - px, my - py), pl.rp, mo.rm);
+        if (ov > 0) mb *= Math.max(0, 1 - ov / (Math.PI * mo.rm * mo.rm));
+      }
+    }
+    const d = Math.hypot(px, py);
+    const fp = diskFlux(d, pl.rp, pl.u1, pl.u2, norm);
+    let blk = 0;
+    if (np && d < 1 + rm.reach) {
+      for (let j = 0; j < np; j++) {
+        const xs = px + rm.x[j], ys = py + rm.y[j], r2 = xs * xs + ys * ys;
+        if (r2 < 1) blk += intensity(Math.sqrt(1 - r2), pl.u1, pl.u2) * rm.op[j];
+      }
+    }
+    moonBlock[i] = mb;
+    bare[i] = dil(fp - mb - sd + shP - dB);
+    ringed[i] = dil(fp - blk * k - mb - sd + shP + shR - dB);
+  }
+  return { bare, ringed, moonBlock, dustB, occ, spotDef, spotHid, reach: rm.reach };
+}
+
+
+// ---------------------------------------------------------------- controls
+const GROUPS = [
+  { title: "Star", items: [
+    ["u1", "Limb darkening u₁", "", 0, 1, 0.01, 0.40, 2],
+    ["u2", "Limb darkening u₂", "", -0.3, 0.8, 0.01, 0.25, 2],
+    ["Rs", "Star radius", "R☉ (moon physics)", 0.1, 3, 0.01, 1.0, 2],
+    ["Ms", "Star mass", "M☉ (moon physics)", 0.08, 3, 0.01, 1.0, 2]]},
+  { title: "Planet and orbit", items: [
+    ["rp", "Planet radius", "Rp/R★", 0.02, 0.25, 0.001, 0.08, 3],
+    ["b", "Impact parameter", "b", 0, 1.3, 0.01, 0.30, 2],
+    ["a", "Semi-major axis", "a/R★", 3, 250, 0.5, 20, 1],
+    ["P", "Period", "days", 0.5, 400, 0.1, 10, 1],
+    ["Mp", "Planet mass", "M_J (moon physics)", 0.03, 13, 0.01, 1.0, 2]]},
+  { title: "Ring (epoch 1)", swatch: "--e1", items: [
+    ["rIn", "Inner edge", "Rp", 1.0, 3.0, 0.01, 1.24, 2],
+    ["rOut", "Outer edge", "Rp", 1.1, 5.0, 0.01, 2.27, 2],
+    ["tau", "Optical depth τ", "", 0, 5, 0.01, 1.0, 2],
+    ["incl", "Tilt to sky", "0 face-on · 90 edge-on", 0, 90, 0.5, 60, 1],
+    ["pa", "Position angle", "°", 0, 180, 0.5, 25, 1]]},
+  { title: "Epoch 2 (a later transit)", swatch: "--e2", cls: "e2", items: [
+    ["dIncl", "Change in tilt", "°", -40, 40, 0.5, 0, 1],
+    ["dPa", "Change in position angle", "° (precession)", -90, 90, 0.5, 0, 1],
+    ["dTau", "Change in τ", "", -3, 3, 0.01, 0, 2],
+    ["ttv", "Timing shift (TTV)", "minutes", -30, 30, 0.5, 0, 1],
+    ["nEp", "Epoch 2 is", "transits later (moon and spots move)", 1, 30, 1, 1, 0]]},
+  { title: "Exomoon", swatch: "--moon", cls: "moon", toggle: "moonOn", items: [
+    ["mR", "Moon radius", "Earth radii", 0.1, 6, 0.01, 1.0, 2],
+    ["mM", "Moon mass", "Earth masses", 0.01, 50, 0.01, 1.0, 2],
+    ["mA", "Moon orbit distance", "planet radii", 2, 100, 0.5, 20, 1],
+    ["mInc", "Moon orbit tilt", "90 edge-on · 0 face-on", 0, 90, 0.5, 90, 1],
+    ["mPh", "Moon position at epoch 1", "° (0 = leading the planet)", 0, 360, 1, 0, 0]]},
+  { title: "Star spots", swatch: "--spot", cls: "spot", toggle: "spotsOn", items: [
+    ["spP", "Star rotation period", "days", 0.2, 40, 0.05, 6, 2],
+    ["spInc", "Star spin tilt", "90 equator-on · 0 pole-on", 0, 90, 0.5, 90, 1],
+    ["spN", "Number of spots", "extra spots spread in longitude", 1, 3, 1, 1, 0],
+    ["spR", "Spot size", "° radius on the star", 1, 40, 0.5, 12, 1],
+    ["spC", "Spot contrast", "0 black · 1 like the photosphere", 0, 0.95, 0.01, 0.5, 2],
+    ["spLat", "Spot latitude", "° (≈ −asin b puts it on the transit chord)", -80, 80, 0.5, -11.5, 1],
+    ["spLon", "Spot longitude at epoch 1", "° (0 = facing us)", 0, 360, 1, 0, 0]]},
+  { title: "Dust clump", swatch: "--dust", cls: "dust", toggle: "dustOn",
+    checks: [["dustOnly", "Dust only (hide the planet, ring and moon)"]], items: [
+    ["dTau0", "Peak optical depth", "", 0.01, 5, 0.01, 1.0, 2],
+    ["dLead", "Leading edge length", "R★ (σ ahead of the peak)", 0.05, 10, 0.05, 0.5, 2],
+    ["dTrail", "Trailing tail length", "R★ (σ behind the peak)", 0.05, 20, 0.05, 2.0, 2],
+    ["dH", "Thickness across the orbit", "R★ (σ)", 0.05, 3, 0.01, 0.6, 2],
+    ["dOff", "Delay after the planet", "hours (+ trails, − leads)", -48, 48, 0.25, 0, 2],
+    ["dN", "Number of fragments", "each next one 0.6× as dense", 1, 3, 1, 1, 0],
+    ["dSep", "Fragment spacing", "R★", 0.5, 10, 0.1, 3, 1],
+    ["dSpread", "Radial spread Δa/a", "% (shears the clump by epoch 2)", 0, 5, 0.05, 0, 2],
+    ["dLoss", "Dust lost per orbit", "%", 0, 50, 0.5, 0, 1],
+    ["dGrain", "Grain radius", "µm (dust-mass readout only)", 0.1, 100, 0.1, 1, 1]]},
+  { title: "Noise (TESS 2-min cadence)", items: [
+    ["sigma", "Scatter per 2-min point", "%", 0, 0.5, 0.001, 0.06, 3],
+    ["contam", "Light from other stars in aperture", "% (dilutes every dip)", 0, 99.5, 0.5, 0, 1]]},
+];
+const PRESETS = {
+  "Warm Saturn": { P: 10, a: 20, b: 0.3, rp: 0.08, rIn: 1.24, rOut: 2.27, tau: 1, incl: 60, pa: 25, dIncl: 0, dPa: 0, dTau: 0, ttv: 0 },
+  "Precessing ring": { P: 10, a: 20, b: 0.3, rp: 0.08, rIn: 1.24, rOut: 2.27, tau: 1, incl: 60, pa: 25, dIncl: 12, dPa: 35, dTau: 0, ttv: 0 },
+  "Saturn at 1 AU": { P: 365.2, a: 215, b: 0.5, rp: 0.084, rIn: 1.24, rOut: 2.27, tau: 1, incl: 70, pa: 30, dIncl: 0, dPa: 0, dTau: 0, ttv: 0 },
+  "Face-on ring": { incl: 5, dIncl: 0, dPa: 0 },
+  "Nearly edge-on": { incl: 88, dIncl: 0, dPa: 0 },
+  "Faint ring": { tau: 0.1, dTau: 0 },
+  "Planet + Earth-size moon": { P: 60, a: 60, b: 0.2, rp: 0.1, tau: 0, dIncl: 0, dPa: 0, dTau: 0, ttv: 0,
+    Rs: 1.0, Ms: 1.0, Mp: 1.0, moonOn: true, mR: 1.0, mM: 1.0, mA: 15, mInc: 90, mPh: 0, nEp: 1, sigma: 0.005 },
+  "Neptune-size moon (Kepler-1625b-like)": { P: 287.4, a: 160, b: 0.1, rp: 0.06, tau: 0, dIncl: 0, dPa: 0, dTau: 0, ttv: 0,
+    Rs: 1.8, Ms: 1.1, Mp: 3.0, moonOn: true, mR: 4.0, mM: 19, mA: 40, mInc: 90, mPh: 30, nEp: 1, sigma: 0.02 },
+  "Spot crossing": { P: 4, a: 10, b: 0.2, rp: 0.1, tau: 0, dIncl: 0, dPa: 0, dTau: 0, ttv: 0, moonOn: false,
+    spotsOn: true, spP: 8, spInc: 90, spN: 1, spR: 12, spC: 0.5, spLat: -11.5, spLon: 0, nEp: 3, sigma: 0.02 },
+  "Sun-like spots (quiet)": { P: 10, a: 20, b: 0.3, rp: 0.1, tau: 0, dIncl: 0, dPa: 0, dTau: 0, ttv: 0,
+    Rs: 1.0, Ms: 1.0, moonOn: false, spotsOn: true, spP: 25.4, spInc: 90, spN: 3, spR: 2.5, spC: 0.7,
+    spLat: -17.5, spLon: 0, nEp: 1, sigma: 0.02 },
+  "Sun-like spots (activity maximum)": { P: 10, a: 20, b: 0.3, rp: 0.1, tau: 0, dIncl: 0, dPa: 0, dTau: 0, ttv: 0,
+    Rs: 1.0, Ms: 1.0, moonOn: false, spotsOn: true, spP: 25.4, spInc: 90, spN: 3, spR: 5, spC: 0.65,
+    spLat: -17.5, spLon: 0, nEp: 1, sigma: 0.02 },
+  "Spotted star + ringed planet": { P: 8, a: 18, b: 0.3, rp: 0.08, rIn: 1.24, rOut: 2.27, tau: 1, incl: 60, pa: 25,
+    dIncl: 0, dPa: 0, dTau: 0, ttv: 0, moonOn: false, spotsOn: true, spP: 2.5, spInc: 70, spN: 3, spR: 18,
+    spC: 0.4, spLat: -20, spLon: 30, nEp: 2, sigma: 0.06 },
+  "Ringed planet + moon": { P: 40, a: 45, b: 0.3, rp: 0.08, rIn: 1.24, rOut: 2.27, tau: 1, incl: 60, pa: 25,
+    dIncl: 0, dPa: 0, dTau: 0, ttv: 0, Rs: 1.0, Ms: 1.0, Mp: 0.3, moonOn: true, mR: 1.5, mM: 2, mA: 10, mInc: 85, mPh: 0, nEp: 3, sigma: 0.01 },
+  "Dust clump with tail (dipper)": { P: 5, a: 12, b: 0.2, tau: 0, ttv: 0, moonOn: false, spotsOn: false, Rs: 0.5,
+    dustOn: true, dustOnly: true, dTau0: 0.8, dLead: 0.5, dTrail: 2.5, dH: 0.8, dOff: 0, dN: 1, dSep: 3,
+    dSpread: 2, dLoss: 30, dGrain: 1, nEp: 1, sigma: 0.06 },
+  "Two-clump dip (like E040)": { P: 30, a: 30, b: 0.3, tau: 0, ttv: 0, moonOn: false, spotsOn: false, Rs: 1.3,
+    dustOn: true, dustOnly: true, dTau0: 0.45, dLead: 0.9, dTrail: 1.6, dH: 0.7, dOff: 0, dN: 2, dSep: 4.5,
+    dSpread: 0.5, dLoss: 10, dGrain: 1, nEp: 1, sigma: 0.06 },
+  "Asteroid-collision debris, 5 orbits later": { P: 100, a: 80, b: 0.1, tau: 0, ttv: 0, moonOn: false, spotsOn: false, Rs: 0.5,
+    dustOn: true, dustOnly: true, dTau0: 1.5, dLead: 0.4, dTrail: 0.6, dH: 0.5, dOff: 0, dN: 1, dSep: 3,
+    dSpread: 0.3, dLoss: 5, dGrain: 1, nEp: 5, sigma: 0.06 },
+  "Disintegrating planet with tail": { P: 0.65, a: 3.5, b: 0.3, rp: 0.02, tau: 0, ttv: 0, moonOn: false, spotsOn: false,
+    Rs: 0.7, dustOn: true, dustOnly: false, dTau0: 0.06, dLead: 0.08, dTrail: 1.2, dH: 0.15, dOff: 0, dN: 1, dSep: 3,
+    dSpread: 0, dLoss: 0, dGrain: 1, nEp: 1, sigma: 0.05 },
+};
+// switched off unless a preset says otherwise
+const PRESET_DEFAULTS = { dustOn: false, dustOnly: false, contam: 0 };
+const S = {};
+const controls = document.getElementById("controls");
+const fmtNum = (v, d) => (+v).toFixed(d);
+for (const g of GROUPS) {
+  const fs = document.createElement("fieldset");
+  if (g.cls) fs.className = g.cls;
+  fs.innerHTML = `<legend>${g.swatch ? `<span class="swatch" style="background:var(${g.swatch})"></span>` : ""}${g.title}${g.toggle ? `<label for="${g.toggle}"><input type="checkbox" id="${g.toggle}"> include</label>` : ""}</legend>`;
+  if (g.toggle) { S[g.toggle] = false; fs.classList.add("off"); }
+  for (const [id, label, unit, min, max, step, val, dec] of g.items) {
+    S[id] = val;
+    const d = document.createElement("div");
+    d.className = "ctl";
+    d.innerHTML = `<label for="${id}">${label} ${unit ? `<small>${unit}</small>` : ""}</label>
+      <output id="${id}_o">${fmtNum(val, dec)}</output>
+      <input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${val}">`;
+    fs.appendChild(d);
+    const inp = d.querySelector("input"), out = d.querySelector("output");
+    inp.addEventListener("input", () => {
+      S[id] = +inp.value;
+      if (id === "rIn" && S.rOut < S.rIn + 0.05) setVal("rOut", S.rIn + 0.05);
+      if (id === "rOut" && S.rOut < S.rIn + 0.05) setVal("rIn", Math.max(1, S.rOut - 0.05));
+      out.textContent = fmtNum(S[id], dec);
+      schedule();
+    });
+    S["_dec_" + id] = dec;
+  }
+  for (const [id, label] of g.checks || []) {
+    S[id] = false;
+    const l = document.createElement("label");
+    l.className = "check";
+    l.innerHTML = `<input type="checkbox" id="${id}"> ${label}`;
+    fs.appendChild(l);
+    const cb = l.querySelector("input");
+    cb.addEventListener("change", () => { S[id] = cb.checked; schedule(); });
+  }
+  controls.appendChild(fs);
+  if (g.toggle) {
+    const cb = fs.querySelector("#" + g.toggle);
+    const sync = () => { S[g.toggle] = cb.checked; fs.classList.toggle("off", !cb.checked);
+      fs.querySelectorAll("input[type=range], .check input").forEach(r => r.disabled = !cb.checked); };
+    cb.addEventListener("change", () => { sync(); schedule(); });
+    sync();
+  }
+}
+const noiseRow = document.createElement("div");
+noiseRow.className = "presets";
+noiseRow.innerHTML = `<button id="reseed">New noise draw</button>`;
+controls.lastChild.appendChild(noiseRow);
+function setVal(id, v) {
+  const inp = document.getElementById(id);
+  if (inp.type === "checkbox") { inp.checked = !!v; inp.dispatchEvent(new Event("change")); return; }
+  inp.value = v; S[id] = +inp.value;
+  document.getElementById(id + "_o").textContent = fmtNum(S[id], S["_dec_" + id]);
+}
+const presetBox = document.getElementById("presets");
+for (const name of Object.keys(PRESETS)) {
+  const b = document.createElement("button");
+  b.textContent = name;
+  b.addEventListener("click", () => {
+    for (const [k, v] of Object.entries(Object.assign({}, PRESET_DEFAULTS, PRESETS[name]))) setVal(k, v);
+    schedule();
+  });
+  presetBox.appendChild(b);
+}
+
+// ---------------------------------------------------------------- model
+let seed = 12345;
+function rng(s) { return () => { s |= 0; s = s + 0x6D2B79F5 | 0;
+  let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+  return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gauss(r) { let u = 0, v = 0; while (u === 0) u = r(); v = r();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+
+let M = null;              // current model
+const G = 6.674e-11, RSUN = 6.957e8, MSUN = 1.989e30, MJUP = 1.898e27,
+      MEARTH = 5.972e24, REARTH = 6.371e6;
+function moonSetup() {
+  if (!S.moonOn) return null;
+  const RS = S.Rs * RSUN, rpM = S.rp * RS, amM = S.mA * rpM;
+  const Mp = S.Mp * MJUP, Mm = S.mM * MEARTH;
+  const Pm = 2 * Math.PI * Math.sqrt(amM ** 3 / (G * (Mp + Mm))) / 86400;
+  const q = Mm / (Mp + Mm);
+  const RH = S.a * RS * Math.cbrt(Mp / (3 * S.Ms * MSUN));
+  return { rm: S.mR * REARTH / RS, am: amM / RS, Pm, q, incl: S.mInc,
+           ph0: S.mPh * Math.PI / 180, hill: amM / RH,
+           ttvMin: q * (amM / RS) / (2 * Math.PI * S.a / S.P) * 1440 };
+}
+let spotCache = { key: "", pts: null };
+function spotSetup(fine) {
+  if (!S.spotsOn) return null;
+  // element size ~ 1/6 of the planet's angular radius (capped) so spot
+  // crossings are resolved; coarser while a slider is being dragged
+  const rpDeg = Math.asin(Math.min(0.99, S.rp)) * 180 / Math.PI;
+  const nr = Math.max(6, Math.min(fine ? 30 : 14, Math.ceil(S.spR / (rpDeg / 6))));
+  const key = [S.spN, S.spR, S.spC, S.spLat, S.spLon, nr].join("|");
+  if (spotCache.key !== key) {
+    const list = [];
+    for (let k = 0; k < S.spN; k++)
+      list.push({ lat: k === 0 ? S.spLat : (k === 1 ? -S.spLat : S.spLat / 2),
+                  lon: S.spLon + 360 * k / S.spN, rad: S.spR, c: S.spC });
+    spotCache = { key, pts: spotElements(list, nr) };
+  }
+  return { pts: spotCache.pts, Prot: S.spP, inc: S.spInc };
+}
+let fineSpots = true;
+// Dust clump for one epoch. By epoch 2 a radial spread da/a shears the clump
+// along the orbit by 3*pi*(da/a)*a per orbit (Keplerian shear, full width of
+// a uniform spread -> sigma grows by width/sqrt(12)); the optical depth falls
+// so that the dust cross-section is conserved, minus the per-orbit loss.
+function dustSetup(e2) {
+  if (!S.dustOn) return null;
+  let sl = S.dLead, st = S.dTrail, tau0 = S.dTau0;
+  if (e2) {
+    const w = 3 * Math.PI * (S.dSpread / 100) * Math.max(S.a, 1.05) * S.nEp;
+    const sl2 = Math.hypot(sl, w / Math.sqrt(12)), st2 = Math.hypot(st, w / Math.sqrt(12));
+    tau0 *= (sl + st) / (sl2 + st2) * (1 - S.dLoss / 100) ** S.nEp;
+    sl = sl2; st = st2;
+  }
+  const n = Math.round(S.dN);
+  let fw = 0; for (let f = 0; f < n; f++) fw += FRAG_W[f];
+  return { tau0, sl, st, h: S.dH, n, sep: S.dSep, off: S.dOff / 24, N: fineSpots ? 72 : 40,
+    // integral of tau over the sky, R*^2
+    area: tau0 * Math.sqrt(2 * Math.PI) / 2 * (sl + st) * Math.sqrt(2 * Math.PI) * S.dH * fw,
+    // extent along the orbit beyond the head, R*
+    reach: 4 * Math.max(sl, st) + S.dSep * (n - 1) };
+}
+function params(epoch) {
+  const e2 = epoch === 2;
+  const hide = S.dustOn && S.dustOnly;
+  const ms = hide ? null : moonSetup(), ss = spotSetup(fineSpots);
+  return { P: S.P, a: Math.max(S.a, 1.05), b: S.b, u1: S.u1, u2: S.u2,
+    rp: hide ? 1e-4 : S.rp,
+    rIn: S.rIn, rOut: S.rOut,
+    tau: hide ? 0 : Math.max(0, S.tau + (e2 ? S.dTau : 0)),
+    incl: Math.min(90, Math.max(0, S.incl + (e2 ? S.dIncl : 0))),
+    pa: S.pa + (e2 ? S.dPa : 0),
+    shift: e2 ? S.ttv / 1440 : 0,
+    moon: ms ? Object.assign({}, ms, { tref: e2 ? S.nEp * S.P : 0 }) : null,
+    spots: ss ? Object.assign({}, ss, { tref: e2 ? S.nEp * S.P : 0 }) : null,
+    dust: dustSetup(e2), contam: S.contam / 100, hide };
+}
+function compute(nGrid) {
+  const p1 = params(1), p2 = params(2);
+  const m1 = ringMap(p1.rp, p1.rIn, p1.rOut, p1.tau, p1.incl, p1.pa, nGrid);
+  const m2 = ringMap(p2.rp, p2.rIn, p2.rOut, p2.tau, p2.incl, p2.pa, nGrid);
+  const reach = Math.max(m1.reach, m2.reach, p1.rp,
+                         p1.moon ? (1 - p1.moon.q) * p1.moon.am + p1.moon.rm : 0);
+  const x = Math.sqrt(Math.max(0, (1 + reach) ** 2 - p1.b ** 2)) / p1.a;
+  const msg = document.getElementById("msg");
+  const dustCrosses = p1.dust && p1.b < 1 + 3 * p1.dust.h;
+  if ((p1.b >= 1 + reach && !dustCrosses) || (p1.a <= 1 + reach && !p1.hide)) {
+    msg.hidden = false;
+    msg.textContent = p1.a <= 1 + reach
+      ? "The ring reaches the star: increase a/R★ or shrink the ring."
+      : "No transit: the impact parameter is larger than 1 + the planet-and-ring radius. Lower b.";
+  } else msg.hidden = true;
+  const halfT = S.P / (2 * Math.PI) * Math.asin(Math.min(1, x));
+  // dust: the clump (head offset by dOff) must clear the star on both sides
+  let halfD = 0;
+  if (p1.dust) { const v = 2 * Math.PI * p1.a / S.P;          // R* per day
+    halfD = Math.abs(p1.dust.off) + 1.1 * (1 + Math.max(p1.dust.reach, p2.dust.reach)) / v; }
+  const half = Math.min(Math.max(halfT * 1.35 + Math.abs(S.ttv) / 1440 +
+      (p1.moon ? 2 * p1.moon.ttvMin / 1440 : 0), halfD, 0.04), S.P / 4);
+  const cad = 2 / 1440;
+  const n = Math.min(1600, Math.max(300, Math.ceil(2 * half / cad)));
+  const t = new Float64Array(n);
+  for (let i = 0; i < n; i++) t[i] = -half + 2 * half * i / (n - 1);
+  const dt = t[1] - t[0];
+  const L1 = lightCurve(t, p1, m1), L2 = lightCurve(t, p2, m2);
+  // like a pipeline: divide each epoch by a straight line fitted to its
+  // out-of-transit flux (removes the spot dimming offset, keeps in-transit
+  // spot-crossing bumps)
+  if (document.getElementById("normOot").checked) {
+    const moonR = p1.moon ? (1 - p1.moon.q) * p1.moon.am + p1.moon.rm : 0;
+    const lim = 1 + Math.max(reach, moonR) + 0.02;
+    for (const [L, P] of [[L1, p1], [L2, p2]]) {
+      let n0 = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;
+      for (let i = 0; i < n; i++) {
+        const q = skyPos(t[i] - P.shift, P.P, P.a, P.b);
+        if ((Math.hypot(q.X, q.Y) > lim || q.Z <= 0) && !L.occ[i]) {
+          n0++; sx += t[i]; sy += L.ringed[i]; sxx += t[i] * t[i]; sxy += t[i] * L.ringed[i];
+        }
+      }
+      if (n0 >= 10) {
+        const den = n0 * sxx - sx * sx, b1 = den ? (n0 * sxy - sx * sy) / den : 0, b0 = (sy - b1 * sx) / n0;
+        for (let i = 0; i < n; i++) { const base = b0 + b1 * t[i]; L.ringed[i] /= base; L.bare[i] /= base; }
+      }
+    }
+  }
+  // 2-min simulated data (independent noise per epoch)
+  const r = rng(seed), nd = Math.floor(2 * half / cad);
+  const td = new Float64Array(nd), d1 = new Float64Array(nd), d2 = new Float64Array(nd);
+  const interp = (arr, tt) => { const f = (tt + half) / dt, i = Math.min(n - 2, Math.max(0, Math.floor(f))), w = f - i;
+    return arr[i] * (1 - w) + arr[i + 1] * w; };
+  for (let i = 0; i < nd; i++) {
+    td[i] = -half + (i + 0.5) * cad;
+    d1[i] = interp(L1.ringed, td[i]) + S.sigma * 1e-2 * gauss(r);
+    d2[i] = interp(L2.ringed, td[i]) + S.sigma * 1e-2 * gauss(r);
+  }
+  // 10-min bins
+  const bw = 10 / 1440, nb = Math.floor(2 * half / bw);
+  const tb = [], b1 = [], b2 = [];
+  for (let k = 0; k < nb; k++) {
+    let s1 = 0, s2 = 0, c = 0;
+    for (let i = 0; i < nd; i++) if (td[i] >= -half + k * bw && td[i] < -half + (k + 1) * bw) { s1 += d1[i]; s2 += d2[i]; c++; }
+    if (c) { tb.push(-half + (k + 0.5) * bw); b1.push(s1 / c); b2.push(s2 / c); }
+  }
+  // metrics
+  let ringMax = 0, epMax = 0, sR = 0, sE = 0, depth = 0, t1 = null, t2 = null;
+  for (let i = 0; i < n; i++) {
+    const dr = L1.ringed[i] - L1.bare[i], de = L2.ringed[i] - L1.ringed[i];
+    ringMax = Math.max(ringMax, Math.abs(dr)); epMax = Math.max(epMax, Math.abs(de));
+    sR += dr * dr; sE += de * de;
+    depth = Math.max(depth, 1 - L1.ringed[i]);
+    if (L1.ringed[i] < 1 - 1e-7) { if (t1 === null) t1 = t[i]; t2 = t[i]; }
+  }
+  const sig = S.sigma * 1e-2, w = dt / cad;
+  let moonMax = 0, bumpMax = 0;
+  for (let i = 0; i < n; i++) {
+    moonMax = Math.max(moonMax, L1.moonBlock[i], L2.moonBlock[i]);
+    bumpMax = Math.max(bumpMax, L1.spotHid[i], L2.spotHid[i]);
+  }
+  let spotAmp = 0;
+  if (p1.spots) {               // brightness change over one full rotation
+    let lo = Infinity, hi = -Infinity;
+    for (let j = 0; j < 72; j++) {
+      const tt = p1.spots.Prot * j / 72; let dd = 0;
+      for (const p of p1.spots.pts) { const q = spotSky(p, tt, p1.spots);
+        if (q.mu > 0) dd += intensity(q.mu, p1.u1, p1.u2) * p.k * p.w * q.mu; }
+      dd /= Math.PI * (1 - p1.u1 / 3 - p1.u2 / 6); lo = Math.min(lo, dd); hi = Math.max(hi, dd);
+    }
+    spotAmp = hi - lo;
+  }
+  let dust = null;
+  if (p1.dust) {
+    // dip shape of the dust alone (epoch 1): time from 10 % of the peak to the
+    // peak (ingress) and from the peak back to 10 % (egress)
+    let i0 = 0, mx1 = 0, mx2 = 0;
+    for (let i = 0; i < n; i++) { if (L1.dustB[i] > mx1) { mx1 = L1.dustB[i]; i0 = i; } mx2 = Math.max(mx2, L2.dustB[i]); }
+    let ia = i0, ib = i0;
+    while (ia > 0 && L1.dustB[ia] > 0.1 * mx1) ia--;
+    while (ib < n - 1 && L1.dustB[ib] > 0.1 * mx1) ib++;
+    // all tau is geometric cross-section of grains of radius s, density 2.5 g/cm3:
+    // dust mass = 4/3 rho s * integral(tau dA); same mass as one rocky body of diameter D
+    const RS = S.Rs * RSUN, rho = 2500, s = S.dGrain * 1e-6;
+    const mass = 4 / 3 * rho * s * p1.dust.area * RS * RS;
+    dust = { max1: mx1, max2: mx2, ing: (t[i0] - t[ia]) * 24, egr: (t[ib] - t[i0]) * 24, mass,
+      D: 2 * Math.cbrt(3 * mass / (4 * Math.PI * rho)), tau2: p2.dust.tau0, len2: p2.dust.st };
+  }
+  M = { t, half, L1, L2, m1, m2, p1, p2, td, d1, d2, tb, b1, b2, dust,
+    depth, dur: t1 === null ? 0 : (t2 - t1) * 24,
+    ringMax, epMax,
+    snrRing: sig > 0 ? Math.sqrt(sR * w) / sig : Infinity,
+    snrEp: sig > 0 ? Math.sqrt(sE * w) / (sig * Math.SQRT2) : Infinity,
+    bin30: S.sigma / Math.sqrt(15), nGrid,
+    spots: p1.spots ? { amp: spotAmp, bump: bumpMax, n: p1.spots.pts.length,
+      lon2: ((S.spLon + 360 * S.nEp * S.P / S.spP) % 360 + 360) % 360 } : null,
+    moon: p1.moon ? Object.assign({}, p1.moon, { depth: moonMax,
+      ph2: ((S.mPh + 360 * S.nEp * S.P / p1.moon.Pm) % 360 + 360) % 360 }) : null };
+}
+
+let pending = false, refineTimer = null;
+function schedule() {
+  if (!pending) { pending = true; requestAnimationFrame(() => { pending = false; fineSpots = false; compute(160); renderAll(); }); }
+  clearTimeout(refineTimer);
+  refineTimer = setTimeout(() => { fineSpots = true; compute(420); renderAll(); }, 250);
+}
+
+// ---------------------------------------------------------------- drawing
+const css = () => { const s = getComputedStyle(document.documentElement);
+  const g = k => s.getPropertyValue(k).trim(); return { bg: g("--panel"), ink: g("--ink"), muted: g("--muted"),
+  rule: g("--rule"), e1: g("--e1"), e2: g("--e2"), bare: g("--bare"), planet: g("--planet"),
+  ring: g("--ring"), space: g("--space"), mono: g("--mono"), good: g("--good"), warn: g("--warn"), bad: g("--bad"),
+  moonc: g("--moon"), spotc: g("--spot"), dust: g("--dust") }; };
+function fit(cv, aspect, minH) {
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth || 300;
+  const h = Math.max(minH || 0, Math.round(w * aspect));
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); cv.style.height = h + "px"; }
+  const ctx = cv.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, w, h };
+}
+function niceTicks(lo, hi, n) {
+  const span = hi - lo || 1, step0 = span / n, mag = 10 ** Math.floor(Math.log10(step0));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= step0);
+  const out = []; for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9 * span; v += step) out.push(+v.toFixed(10));
+  return out;
+}
+let tCursor = 0;          // days from mid-transit
+let showEpoch = 1;
+
+function chart(cv, cfg) {
+  const { ctx, w, h } = fit(cv, cfg.aspect, cfg.minH), C = css();
+  ctx.clearRect(0, 0, w, h);
+  const L = 72, R = 12, T = 8, B = 30, pw = w - L - R, ph = h - T - B;
+  let ylo = Infinity, yhi = -Infinity;
+  for (const s of cfg.series) for (const v of s.y) { if (isFinite(v)) { ylo = Math.min(ylo, v); yhi = Math.max(yhi, v); } }
+  if (cfg.band) { ylo = Math.min(ylo, -cfg.band); yhi = Math.max(yhi, cfg.band); }
+  if (cfg.zero) { ylo = Math.min(ylo, 0); yhi = Math.max(yhi, 0); }
+  if (!isFinite(ylo) || yhi - ylo < 1e-9) { ylo = -1; yhi = 1; }
+  const pad = (yhi - ylo) * 0.08; ylo -= pad; yhi += pad;
+  const xlo = cfg.x0, xhi = cfg.x1;
+  const X = v => L + (v - xlo) / (xhi - xlo) * pw, Y = v => T + (yhi - v) / (yhi - ylo) * ph;
+  ctx.font = `11px ${C.mono}`; ctx.fillStyle = C.muted; ctx.strokeStyle = C.rule; ctx.lineWidth = 1;
+  const yt = niceTicks(ylo, yhi, 5), ystep = yt.length > 1 ? yt[1] - yt[0] : 1;
+  const ydec = Math.min(4, Math.max(0, -Math.floor(Math.log10(ystep) + 1e-9)));
+  for (const v of yt) { const y = Math.round(Y(v)) + 0.5;
+    ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(L + pw, y); ctx.stroke();
+    ctx.textAlign = "right"; ctx.textBaseline = "middle"; ctx.fillText(v.toFixed(ydec), L - 6, y); }
+  for (const v of niceTicks(xlo, xhi, 8)) { const x = Math.round(X(v)) + 0.5;
+    ctx.beginPath(); ctx.moveTo(x, T + ph); ctx.lineTo(x, T + ph + 4); ctx.stroke();
+    ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.fillText(v.toString(), x, T + ph + 6); }
+  ctx.save(); ctx.translate(9, T + ph / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = "center";
+  ctx.textBaseline = "middle"; ctx.fillText(cfg.ylab, 0, 0); ctx.restore();
+  ctx.textAlign = "right"; ctx.textBaseline = "bottom"; ctx.fillText(cfg.xlab, L + pw, h - 1);
+  ctx.save(); ctx.beginPath(); ctx.rect(L, T, pw, ph); ctx.clip();
+  if (cfg.band) { ctx.fillStyle = C.rule; ctx.globalAlpha = 0.6; ctx.fillRect(L, Y(cfg.band), pw, Y(-cfg.band) - Y(cfg.band)); ctx.globalAlpha = 1; }
+  if (cfg.zero) { ctx.strokeStyle = C.muted; ctx.beginPath(); ctx.moveTo(L, Y(0)); ctx.lineTo(L + pw, Y(0)); ctx.stroke(); }
+  for (const s of cfg.series) {
+    const col = C[s.color]; ctx.globalAlpha = s.alpha || 1;
+    if (s.kind === "dots") { ctx.fillStyle = col;
+      for (let i = 0; i < s.x.length; i++) { ctx.beginPath(); ctx.arc(X(s.x[i]), Y(s.y[i]), s.r || 1, 0, 7); ctx.fill(); }
+    } else { ctx.strokeStyle = col; ctx.lineWidth = s.width || 1.6; ctx.setLineDash(s.dash || []);
+      ctx.beginPath(); for (let i = 0; i < s.x.length; i++) { const px = X(s.x[i]), py = Y(s.y[i]); i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+      ctx.stroke(); ctx.setLineDash([]); }
+    ctx.globalAlpha = 1;
+  }
+  const cx = Math.round(X(tCursor * 24)) + 0.5;
+  ctx.strokeStyle = C.ink; ctx.globalAlpha = 0.5; ctx.setLineDash([3, 3]);
+  ctx.beginPath(); ctx.moveTo(cx, T); ctx.lineTo(cx, T + ph); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+  ctx.restore();
+  ctx.strokeStyle = C.rule; ctx.strokeRect(L + 0.5, T + 0.5, pw - 1, ph - 1);
+}
+
+let starImg = null, starKey = "";
+function starImage(size, u1, u2) {
+  const key = `${size}|${u1}|${u2}`;
+  if (key === starKey) return starImg;
+  const c = document.createElement("canvas"); c.width = c.height = size;
+  const g = c.getContext("2d"), im = g.createImageData(size, size), r0 = size / 2;
+  for (let j = 0; j < size; j++) for (let i = 0; i < size; i++) {
+    const x = (i + 0.5 - r0) / r0, y = (j + 0.5 - r0) / r0, r2 = x * x + y * y, k = 4 * (j * size + i);
+    if (r2 >= 1) { im.data[k + 3] = 0; continue; }
+    const I = Math.max(0, intensity(Math.sqrt(1 - r2), u1, u2));
+    // warm photosphere: brighter centre is whiter
+    im.data[k] = 255 * Math.min(1, 0.55 + 0.47 * I);
+    im.data[k + 1] = 255 * Math.min(1, 0.30 + 0.62 * I);
+    im.data[k + 2] = 255 * Math.min(1, 0.08 + 0.62 * I * I);
+    im.data[k + 3] = 255;
+  }
+  g.putImageData(im, 0, 0);
+  starImg = c; starKey = key; return c;
+}
+// occulter sprite: ring pixels (alpha = opacity) and opaque planet
+function occulter(ctx, cx, cy, scale, p, C, alphaFloor) {
+  const n = ringNormal(p.incl, p.pa);
+  const nz = Math.abs(n[2]) > 1e-9 ? n[2] : 1e-9;
+  const op = 1 - Math.exp(-p.tau / Math.abs(nz)), Rpx = p.rp * p.rOut * scale;
+  const step = Math.max(1, Rpx / 90);
+  if (p.tau > 0 && op > 0) {
+    ctx.fillStyle = C.ring;
+    for (let py = -Rpx; py <= Rpx; py += step) for (let px = -Rpx; px <= Rpx; px += step) {
+      const x = px / scale, y = -py / scale;           // sky y up
+      const zr = -(n[0] * x + n[1] * y) / nz, dist = Math.sqrt(x * x + y * y + zr * zr) / p.rp;
+      if (dist >= p.rIn && dist <= p.rOut) { ctx.globalAlpha = alphaFloor + (1 - alphaFloor) * op;
+        ctx.fillRect(cx + px - step / 2, cy + py - step / 2, step + 0.5, step + 0.5); }
+    }
+    ctx.globalAlpha = 1;
+  }
+  if (p.hide) return;
+  ctx.fillStyle = C.planet; ctx.beginPath(); ctx.arc(cx, cy, p.rp * scale, 0, 7); ctx.fill();
+}
+// dust clump: cells shaded by opacity 1 - exp(-tau)
+function drawDust(ctx, cx, cy, scale, P, C, w, h) {
+  const du = P.dust, s = skyPos(tCursor - P.shift - du.off, P.P, P.a, P.b);
+  if (s.Z <= 0) return;
+  const step = Math.max(2, Math.round(scale / 45));
+  const x0 = Math.max(0, cx + (s.X - 5 * du.st - du.sep * (du.n - 1)) * scale), x1 = Math.min(w, cx + (s.X + 5 * du.sl) * scale);
+  const y0 = Math.max(0, cy - (s.Y + 4 * du.h) * scale), y1 = Math.min(h, cy - (s.Y - 4 * du.h) * scale);
+  ctx.fillStyle = C.dust;
+  for (let py = y0; py < y1; py += step) for (let px = x0; px < x1; px += step) {
+    const op = 1 - Math.exp(-dustTau((px - cx) / scale - s.X, (cy - py) / scale - s.Y, du));
+    if (op < 0.01) continue;
+    ctx.globalAlpha = 0.85 * op; ctx.fillRect(px, py, step, step);
+  }
+  ctx.globalAlpha = 1;
+}
+function drawSky() {
+  const cv = document.getElementById("sky"), { ctx, w, h } = fit(cv, 0.52, 220), C = css();
+  ctx.fillStyle = C.space; ctx.fillRect(0, 0, w, h);
+  const scale = Math.min(h * 0.44, w * 0.3), cx = w / 2, cy = h / 2;
+  const img = starImage(Math.round(2 * scale), M.p1.u1, M.p1.u2);
+  ctx.drawImage(img, cx - scale, cy - scale, 2 * scale, 2 * scale);
+  const SP = (showEpoch === 1 ? M.p1 : M.p2).spots;
+  if (SP) {
+    ctx.fillStyle = C.spotc;
+    for (const p of SP.pts) {
+      const q = spotSky(p, tCursor, SP);
+      if (q.mu <= 0) continue;
+      ctx.globalAlpha = Math.min(1, 0.9 * p.k);
+      const r = Math.max(0.7, p.size * scale * 0.75);
+      ctx.beginPath(); ctx.ellipse(cx + q.x * scale, cy - q.y * scale, r, r, 0, 0, 7); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+  // transit chord
+  const P = showEpoch === 1 ? M.p1 : M.p2;
+  ctx.strokeStyle = C[showEpoch === 1 ? "e1" : "e2"]; ctx.globalAlpha = 0.7; ctx.setLineDash([4, 4]); ctx.beginPath();
+  for (let i = 0; i <= 120; i++) { const tt = -M.half + 2 * M.half * i / 120, s = skyPos(tt, P.P, P.a, P.b);
+    const x = cx + s.X * scale, y = cy - s.Y * scale; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+  ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+  if (P.dust) drawDust(ctx, cx, cy, scale, P, C, w, h);
+  const s = skyPos(tCursor - P.shift, P.P, P.a, P.b);
+  let px = s.X, py = s.Y;
+  if (P.moon) {
+    const r = moonRel(tCursor, P.moon);
+    px -= P.moon.q * r.x; py -= P.moon.q * r.y;
+    const mx = s.X + (1 - P.moon.q) * r.x, my = s.Y + (1 - P.moon.q) * r.y;
+    const draw = () => { ctx.fillStyle = C.moonc; ctx.beginPath();
+      ctx.arc(cx + mx * scale, cy - my * scale, Math.max(1.5, P.moon.rm * scale), 0, 7); ctx.fill();
+      ctx.strokeStyle = C.moonc; ctx.globalAlpha = 0.5; ctx.beginPath();
+      ctx.arc(cx + mx * scale, cy - my * scale, Math.max(5, P.moon.rm * scale + 4), 0, 7); ctx.stroke(); ctx.globalAlpha = 1; };
+    if (r.z < 0) draw();                       // moon behind the planet
+    occulter(ctx, cx + px * scale, cy - py * scale, scale, P, C, 0.35);
+    if (r.z >= 0) draw();
+  } else occulter(ctx, cx + px * scale, cy - py * scale, scale, P, C, 0.35);
+  ctx.font = `11px ${C.mono}`; ctx.fillStyle = C.muted; ctx.textAlign = "left"; ctx.textBaseline = "top";
+  ctx.fillText(`epoch ${showEpoch}   b = ${P.b.toFixed(2)}`, 8, 8);
+  for (const [id, p, col] of [["z1", M.p1, "e1"], ["z2", M.p2, "e2"]]) {
+    const z = document.getElementById(id), r = fit(z, 0.62, 100), q = r.ctx;
+    q.fillStyle = C.space; q.fillRect(0, 0, r.w, r.h);
+    const sc = Math.min(r.w, r.h) * 0.46 / (p.rp * Math.max(p.rOut, 1));
+    occulter(q, r.w / 2, r.h / 2, sc, p, C, 0.35);
+    q.strokeStyle = C[col]; q.lineWidth = 2; q.strokeRect(1, 1, r.w - 2, r.h - 2);
+    document.getElementById(id + "cap").textContent = `Epoch ${id[1]}: tilt ${p.incl.toFixed(1)}°, PA ${(((p.pa % 180) + 180) % 180).toFixed(1)}°, τ ${p.tau.toFixed(2)}`;
+  }
+}
+function drawCharts() {
+  const tH = Array.from(M.t, v => v * 24), sh = document.getElementById("showData").checked && S.sigma > 0;
+  const pct = a => Array.from(a, v => (v - 1) * 100);
+  const lcSeries = [];
+  if (sh) {
+    lcSeries.push({ kind: "dots", x: Array.from(M.td, v => v * 24), y: pct(M.d1), color: "e1", alpha: 0.12, r: 0.9 });
+    lcSeries.push({ kind: "dots", x: Array.from(M.td, v => v * 24), y: pct(M.d2), color: "e2", alpha: 0.12, r: 0.9 });
+    lcSeries.push({ kind: "dots", x: M.tb.map(v => v * 24), y: M.b1.map(v => (v - 1) * 100), color: "e1", r: 2.2 });
+    lcSeries.push({ kind: "dots", x: M.tb.map(v => v * 24), y: M.b2.map(v => (v - 1) * 100), color: "e2", r: 2.2 });
+  }
+  lcSeries.push({ x: tH, y: pct(M.L1.bare), color: "bare", dash: [5, 4], width: 1.4 });
+  lcSeries.push({ x: tH, y: pct(M.L1.ringed), color: "e1", width: 2 });
+  lcSeries.push({ x: tH, y: pct(M.L2.ringed), color: "e2", width: 2 });
+  if (sh) { // keep the y-range on the model, not on noise outliers
+    const lo = Math.min(...pct(M.L1.ringed), ...pct(M.L2.ringed)), sp = Math.max(-lo, 0.01);
+    for (const s of lcSeries) if (s.kind === "dots" && s.r < 1) s.y = s.y.map(v => Math.max(lo - 0.35 * sp, Math.min(0.35 * sp, v)));
+  }
+  chart(document.getElementById("lc"), { aspect: 0.36, minH: 220, x0: -M.half * 24, x1: M.half * 24,
+    series: lcSeries, xlab: "hours from mid-transit", ylab: "flux change (%)" });
+  const dr = [], de = [];
+  for (let i = 0; i < M.t.length; i++) { dr.push((M.L1.ringed[i] - M.L1.bare[i]) * 100); de.push((M.L2.ringed[i] - M.L1.ringed[i]) * 100); }
+  chart(document.getElementById("diff"), { aspect: 0.26, minH: 170, x0: -M.half * 24, x1: M.half * 24, zero: true,
+    band: S.sigma > 0 ? M.bin30 : 0,
+    series: [{ x: tH, y: dr, color: "e1", dash: [5, 4], width: 1.6 }, { x: tH, y: de, color: "e2", width: 2 }],
+    xlab: "hours from mid-transit", ylab: "difference (%)" });
+}
+function chip(snr) {
+  if (!isFinite(snr)) return `<span class="chip good">noise-free</span>`;
+  if (snr >= 7) return `<span class="chip good">detectable</span>`;
+  if (snr >= 3) return `<span class="chip warn">marginal</span>`;
+  return `<span class="chip bad">below noise</span>`;
+}
+function drawReadouts() {
+  const f = v => v >= 1 ? v.toFixed(2) : v >= 0.1 ? v.toFixed(3) : v.toFixed(4), sn = v => isFinite(v) ? v.toFixed(1) : "∞";
+  document.getElementById("readouts").innerHTML = `
+    <div class="ro"><dt>Transit depth</dt><dd>${f(M.depth * 100)} <small>% dip</small></dd></div>
+    <div class="ro"><dt>Duration T₁₄</dt><dd>${M.dur.toFixed(2)} <small>h</small></dd></div>
+    <div class="ro"><dt>Ring signal, epoch 1</dt><dd>${f(M.ringMax * 100)} <small>% max</small></dd></div>
+    <div class="ro"><dt>Ring SNR, one transit</dt><dd>${sn(M.snrRing)}${chip(M.snrRing)}</dd></div>
+    <div class="ro"><dt>Epoch 2 − epoch 1</dt><dd>${f(M.epMax * 100)} <small>% max</small></dd></div>
+    ${M.moon ? `
+    <div class="ro"><dt>Moon dip</dt><dd>${f(M.moon.depth * 100)} <small>% max</small></dd></div>
+    <div class="ro"><dt>Moon orbital period</dt><dd>${M.moon.Pm < 2 ? (24 * M.moon.Pm).toFixed(1) + " <small>h</small>" : M.moon.Pm.toFixed(2) + " <small>d</small>"}</dd></div>
+    <div class="ro"><dt>Planet timing wobble (TTV)</dt><dd>±${M.moon.ttvMin.toFixed(1)} <small>min</small></dd></div>
+    <div class="ro"><dt>Moon orbit / Hill radius</dt><dd>${M.moon.hill.toFixed(2)}${M.moon.hill < 0.49 ? `<span class="chip good">stable</span>` : `<span class="chip bad">unstable</span>`}</dd></div>
+    <div class="ro"><dt>Moon position at epoch 2</dt><dd>${M.moon.ph2.toFixed(0)}<small>°</small></dd></div>` : ""}
+    ${M.spots ? `
+    <div class="ro"><dt>Spot rotation signal</dt><dd>${f(M.spots.amp * 100)} <small>% peak-to-peak</small></dd></div>
+    <div class="ro"><dt>Largest spot-crossing bump</dt><dd>${f(M.spots.bump * 100)} <small>%</small></dd></div>
+    <div class="ro"><dt>Spot longitude at epoch 2</dt><dd>${M.spots.lon2.toFixed(0)}<small>°</small></dd></div>` : ""}
+    ${M.dust ? `
+    <div class="ro"><dt>Dust dip, epoch 1 → 2</dt><dd>${f(M.dust.max1 * 100)} → ${f(M.dust.max2 * 100)} <small>%</small></dd></div>
+    <div class="ro"><dt>Dust ingress / egress</dt><dd>${M.dust.ing.toFixed(1)} / ${M.dust.egr.toFixed(1)} <small>h</small></dd></div>
+    <div class="ro"><dt>Dust mass (grain radius ${S.dGrain} µm)</dt><dd>${M.dust.mass.toExponential(1)} <small>kg</small></dd></div>
+    <div class="ro"><dt>Same mass as one asteroid of</dt><dd>${M.dust.D >= 1000 ? (M.dust.D / 1000).toFixed(M.dust.D < 1e4 ? 1 : 0) + " <small>km</small>" : M.dust.D.toFixed(0) + " <small>m</small>"} <small>diameter</small></dd></div>
+    <div class="ro"><dt>Epoch 2 peak τ / tail σ</dt><dd>${M.dust.tau2.toFixed(2)} / ${M.dust.len2.toFixed(1)} <small>R★</small></dd></div>` : ""}
+    <div class="ro"><dt>Change SNR, two transits</dt><dd>${M.epMax < 1e-9 ? "0.0" : sn(M.snrEp)}${M.epMax < 1e-9 ? `<span class="chip bad">no change</span>` : chip(M.snrEp)}</dd></div>`;
+}
+function drawPy() {
+  const p1 = M.p1, p2 = M.p2, inc = (Math.acos(p1.b / p1.a) * 180 / Math.PI).toFixed(4);
+  document.getElementById("py").textContent =
+`import numpy as np
+import ringed_transit as rt
+
+t = np.arange(${(-M.half).toFixed(4)}, ${M.half.toFixed(4)}, 2 / 1440)   # days, TESS 2-min
+common = dict(P=${p1.P}, a=${p1.a}, inc=${inc}, rp=${p1.rp}, u1=${p1.u1}, u2=${p1.u2},
+              r_in=${p1.rIn}, r_out=${p1.rOut}, n_grid=400)
+epoch1 = rt.light_curve(t, t0=0.0, tau=${p1.tau}, ring_incl=${p1.incl}, ring_pa=${p1.pa}, **common)
+epoch2 = rt.light_curve(t, t0=${(p2.shift).toFixed(6)}, tau=${p2.tau}, ring_incl=${p2.incl}, ring_pa=${p2.pa}, **common)
+no_ring = rt.light_curve(t, t0=0.0, tau=0.0, ring_incl=${p1.incl}, ring_pa=${p1.pa}, **common)
+print("transit dip, %:", 100 * (1 - epoch1.min()))${S.moonOn ? "\n# note: the exomoon is simulated on this page only; ringed_transit.py has no moon model" : ""}${S.spotsOn ? "\n# note: star spots are simulated on this page only (ringed_transit.py has its own spot-crossing nuisance model)" : ""}${S.dustOn ? "\n# note: the dust clump is simulated on this page only (ring_fit_young.py fits the same asymmetric-Gaussian clump shape in time)" : ""}${S.contam > 0 ? `\n# note: dilution by other stars: observed = ${(1 - S.contam / 100).toFixed(3)} * model + ${(S.contam / 100).toFixed(3)}` : ""}
+print("epoch change, max %:", 100 * np.abs(epoch2 - epoch1).max())`;
+}
+function renderAll() { if (!M) return; drawSky(); drawCharts(); drawReadouts(); drawPy(); syncT(); }
+function renderTime() { if (!M) return; drawSky(); drawCharts(); }
+
+// ---------------------------------------------------------------- transport
+const tpos = document.getElementById("tpos"), tout = document.getElementById("tout");
+function syncT() { tpos.value = Math.round((tCursor / M.half + 1) * 500); tout.textContent = `${(tCursor * 24 >= 0 ? "+" : "")}${(tCursor * 24).toFixed(2)} h`; }
+tpos.addEventListener("input", () => { tCursor = (tpos.value / 500 - 1) * M.half; syncT(); renderTime(); });
+let playing = false, last = 0;
+document.getElementById("play").addEventListener("click", e => {
+  playing = !playing; e.target.textContent = playing ? "Pause" : "Play";
+  if (playing) { last = performance.now(); requestAnimationFrame(step); }
+});
+function step(now) {
+  if (!playing) return;
+  const dtw = (now - last) / 1000; last = now;
+  tCursor += dtw * (2 * M.half / 6);                 // cross the window in 6 s
+  if (tCursor > M.half) tCursor = -M.half;
+  syncT(); renderTime(); requestAnimationFrame(step);
+}
+for (const [id, e] of [["showE1", 1], ["showE2", 2]]) document.getElementById(id).addEventListener("click", () => {
+  showEpoch = e; document.getElementById("showE1").setAttribute("aria-pressed", e === 1);
+  document.getElementById("showE2").setAttribute("aria-pressed", e === 2); renderTime(); });
+document.getElementById("showData").addEventListener("change", drawCharts);
+document.getElementById("normOot").addEventListener("change", () => schedule());
+document.getElementById("reseed").addEventListener("click", () => { seed = (seed * 1103515245 + 12345) >>> 0; compute(M ? M.nGrid : 420); renderAll(); });
+document.getElementById("copyPy").addEventListener("click", () => {
+  const txt = document.getElementById("py").textContent, ok = document.getElementById("copied");
+  const done = () => { ok.hidden = false; setTimeout(() => ok.hidden = true, 1500); };
+  if (navigator.clipboard) navigator.clipboard.writeText(txt).then(done, () => selectPy());
+  else selectPy();
+});
+function selectPy() { const r = document.createRange(); r.selectNodeContents(document.getElementById("py"));
+  const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+new ResizeObserver(() => renderAll()).observe(document.querySelector(".stage"));
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", renderAll);
+new MutationObserver(renderAll).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+tCursor = 0;
+compute(420); renderAll();
+</script>
