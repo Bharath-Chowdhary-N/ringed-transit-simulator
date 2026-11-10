@@ -1,5 +1,7 @@
 # Ringed Transit Simulator
 
+[![DOI](https://zenodo.org/badge/1452279977.svg)](https://doi.org/10.5281/zenodo.24099217)
+
 Light-curve models of transiting exoplanets with rings.
 
 ![Ringed Transit Simulator](simulation.png)
